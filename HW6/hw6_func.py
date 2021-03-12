@@ -302,9 +302,11 @@ class LinearRegression(LearningAlgorithm):
 
         #No specific initialization required for this class
 
-    def learn(self):
+    def learn(self,lamb=0):
         """
         Obtain the weights w of the linear regression with the currently loaded data_x and data_y
+
+        lamb is the weight decay lambda. By defult, lamb=0, that is, no decay is applied
         """
 
         #Obtain matrix x_art, which includes the artificial entry x0=0 for all x
@@ -315,8 +317,13 @@ class LinearRegression(LearningAlgorithm):
             x_art.append([1]) #Append a list of a single element at first
             x_art[i].extend(self.x[i]) #x[i] is a list; use .extend to add each item from x[i] individually
 
+        # Convert to array, get transpose and number of columns
+        x_art = np.array(x_art) 
+        x_art_t = np.transpose(x_art)
+        ncol=x_art.shape[1]
+
         #Obtain the pseudo inverse of self.x
-        pseudo_inv = np.linalg.pinv(x_art)
+        pseudo_inv = np.linalg.pinv(x_art_t @ x_art + lamb * np.identity(ncol)) @ x_art_t # @ = matrix multiplication
 
         #Update weights accordingly
         self.weights = np.inner(pseudo_inv,self.y)
