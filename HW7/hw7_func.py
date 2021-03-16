@@ -2,6 +2,8 @@ import random
 import numpy as np 
 from math import e, log
 import pandas as pd 
+from sklearn.svm import SVC
+from sklearn.metrics import zero_one_loss
 
 def random_point(xlim=[-1,1],ylim=[-1,1]):
     """
@@ -140,6 +142,95 @@ def split_dataset(x,y,i=25):
     y_test = y[i:]
 
     return (x_train,y_train,x_test,y_test)
+
+def questions8and9(N=10,N_test_mult=10,N_exp=1000,xlim=[-1,1],ylim=[-1,1]):
+    """
+    Solves questions 8 and 9 from HW7
+    """
+
+    #Number of test cases for the test dataset
+    N_test = N * N_test_mult
+
+    #Define "infinity" to use as the C value for the SVM
+    inf=10000000000000000000
+
+    #Initialize errors and support vector counts to 0
+    error_perceptron=0
+    error_svm = 0
+    n_support = 0 
+    svm_count = 0 # Counts how many times svm has been better
+
+    for exp in range(0,N_exp):
+
+        #Display current experiment in console, every 50 experiments
+        if (exp+1 == 1) or ((exp+1) % 50 ==0):
+            print(f'Running experiment number {exp+1}...')
+
+        #Target line
+        target_function = line(random=True,xlim=xlim,ylim=ylim).map   
+
+        #Initialize a data set of x (point coordinates) and y (target values)
+        #Keep trying until the data set has both +1 and -1 values
+        while True:
+            x,y = create_dataset(random_point,target_function,N)
+
+            if (1 in y) and (-1 in y):
+                break
+        
+        #Now create a test dataset
+        x_test,y_test = create_dataset(random_point,target_function,N_test)
+
+        ####################################################################
+        #####                    PERCEPTRON
+        ####################################################################
+        
+        #Initialize perceptron with the x and y lists
+        p = Perceptron(x,y)
+
+        #Apply the learning algorithm and store iteration count
+        iter_count = p.learn()
+
+        #Test learning
+        current_error_perceptron = p.test_learning(x_test,y_test)
+        error_perceptron += current_error_perceptron 
+
+        ####################################################################
+        #####                       SVM
+        ####################################################################
+        #Instantiate SVC object
+        svm = SVC(C=inf,kernel='linear')
+
+        #Fit
+        svm.fit(x,y)
+
+        #Predict
+        y_pred = svm.predict(x_test)
+
+        #Evaluate error
+        current_error_svm = zero_one_loss(y_test, y_pred)
+        error_svm += current_error_svm
+        n_support += svm.n_support_[0] + svm.n_support_[1]
+
+        ####################################################################
+        #####                      COMPARISON
+        ####################################################################
+
+        # Which model has the smallest error?
+        if (current_error_svm < current_error_perceptron):
+            svm_count += 1 #Add to count if SVM is better
+
+    #Average errors
+    error_perceptron /= N_exp
+    error_svm /= N_exp
+    n_support /= N_exp
+    svm_count /= N_exp
+
+    #Print results
+    print()
+    print(f'Average E_out for Perceptron: {round(error_perceptron,4)}')
+    print(f'Average E_out for SVM: {round(error_svm,4)}')
+    print(f'Average number of support vectors: {int(round(n_support,0))}')
+    print(f'SVM fared better in {int(round(svm_count*100,0))}% of runs')
 
 class line:
 
