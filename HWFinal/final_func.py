@@ -3,6 +3,8 @@ from sklearn.model_selection import train_test_split,cross_val_score,ShuffleSpli
 from sklearn.svm import SVC
 from sklearn.metrics import zero_one_loss,make_scorer,accuracy_score
 import numpy as np
+from math import sin, pi
+import random
 
 def read_hw8_datasets(file_path,y1=1,y2=None):
     """
@@ -65,7 +67,7 @@ def questions7and8(y1_list,q=7,lamb=1):
 
     for y1 in y1_list:
         # Read from dataset
-        x,y= read_hw8_datasets('features.test',y1=y1)
+        x,y= read_hw8_datasets('features.train',y1=y1)
 
         # Convert to lists for compatibility
         x = x.values.tolist()
@@ -94,6 +96,45 @@ def questions7and8(y1_list,q=7,lamb=1):
     print(f'Corresponding y1 = {y_min}')
     print(f'Ein = {round(error_min,3)}')
     print()
+
+def final_target(x1,x2):
+    """
+    Target function for the RBF questions of the final.
+    f(x1,x2) = sign(x2 - x1 + 0.25sin(pi*x1))
+    """
+
+    # Evalue innermost term
+    res = x2 - x1 + 0.25*(pi*x1)
+
+    # Return sign
+    if res > 0:
+        return 1
+    elif res < 0:
+        return -1
+    else:
+        return 0
+
+def final_dataset(N=100,target_function=final_target,x1_lim=[-1,1], x2_lim=[-1,1]):
+    """
+    Generates a dataset of N data points for questions 13
+    to 18. x1 and x2 values are bounded by x1_lim and x2_lim.
+    """
+
+    # Start with empty lists
+    x=[]
+    y=[]
+
+    # Create N points
+    for i in range(N):
+        #x1 and x2 must respect given limits
+        x1 = random.uniform(x1_lim[0],x1_lim[1])
+        x2 = random.uniform(x2_lim[0],x2_lim[1])
+
+        #Append to x and y
+        x.append([x1,x2])
+        y.append(target_function(x1,x2))
+
+    return (x,y)
 
 class LearningAlgorithm():
     """
