@@ -1,7 +1,7 @@
 import pandas as pd 
-from sklearn.model_selection import train_test_split,cross_val_score,ShuffleSplit
 from sklearn.svm import SVC
-from sklearn.metrics import zero_one_loss,make_scorer,accuracy_score
+from sklearn.metrics import zero_one_loss
+from sklearn.cluster import KMeans
 import numpy as np
 from math import sin, pi
 import random
@@ -104,15 +104,10 @@ def final_target(x1,x2):
     """
 
     # Evalue innermost term
-    res = x2 - x1 + 0.25*(pi*x1)
+    res = x2 - x1 + 0.25*sin(pi*x1)
 
     # Return sign
-    if res > 0:
-        return 1
-    elif res < 0:
-        return -1
-    else:
-        return 0
+    return np.sign(res)
 
 def final_dataset(N=100,target_function=final_target,x1_lim=[-1,1], x2_lim=[-1,1]):
     """
@@ -135,6 +130,292 @@ def final_dataset(N=100,target_function=final_target,x1_lim=[-1,1], x2_lim=[-1,1
         y.append(target_function(x1,x2))
 
     return (x,y)
+
+def final_phi(x_list,mu_list,gamma=1.5):
+    """
+    Applies the RBF kernel to x and mu. Returns a list of lists that represents a matrix
+    phi = [[exp(-gamma*norm(x1-mu1)**2), exp(-gamma*norm(x1-mu2)**2), ... exp(-gamma*norm(x1-muk)**2)],
+           [exp(-gamma*norm(x2-mu1)**2), exp(-gamma*norm(x2-mu2)**2), ... exp(-gamma*norm(x2-muk)**2)]
+           .                                        .                                        .
+           .                                        .                                        .
+           .                                        .                                        .
+           [exp(-gamma*norm(xN-mu1)**2), exp(-gamma*norm(xN-mu2)**2), ... exp(-gamma*norm(xN-muk)**2)]]
+    """
+
+    res =[]
+
+    for x in x_list:
+        temp=[]
+
+        for mu in mu_list:
+            #Convert to numpy arrays
+            x_array = np.array(x)
+            mu_array = np.array(mu)
+
+            # Evalute conversion
+            temp2=np.exp(-gamma*np.linalg.norm(x_array-mu_array)**2)
+            
+            # Back to list
+            temp2 = temp2.tolist()
+
+            #append to temp
+            temp.append(temp2)
+
+        #Append to final results
+        res.append(temp)
+
+    return res
+
+def questionsRBF(N_train=100,N_test=100,N_exp=500):
+    """
+    Solves various questions regarding RBF. Questions 13, 14, 15, 16 and 18.
+    """
+
+    # Constants of the SVM and RBF models
+    C = 10000000000000000 #Hard margin
+    kernel='rbf'
+    gamma=1.5
+    K = [9, 12]
+    lamb = 0
+
+    #Start counts at 0
+    count = 0
+    count_k = [0, 0]
+    count_k_sep = [0, 0]
+    N_actual = 0
+
+    # Count for each alternative of Q16
+    count_alt = {'a':0,'b':0,'c':0,'d':0,'e':0}
+
+    #Repeat N_exp times
+    for i in range(N_exp):
+
+        if (i % (N_exp/10) ==0):
+            print(f'Running experiment number {i}...')
+        #######################################################
+        ###             TEST & TRAINING DATASETS
+        #######################################################
+
+        # Generate training dataset (compatible with the funciton made for hw8)
+        x,y= final_dataset(N=N_train)
+
+        # Generate a separate dataset for Eout
+        x_out,y_out = final_dataset(N=N_test)
+        
+        # Increment N_actual
+        N_actual += 1
+
+        #######################################################
+        ###              SVC WITH HARD MARGIN
+        #######################################################
+        #Instantiate SVC object
+        svm = SVC(C=C,kernel=kernel,gamma=gamma)
+
+        #Fit
+        svm.fit(x,y)
+
+        #Evaluate y_pred for the dataset points to calculate Ein
+        y_pred_in = svm.predict(x)
+
+        #Evaluate ein_svm
+        ein_svm = zero_one_loss(y, y_pred_in)
+
+        #If Ein > 0, add to count
+        if ein_svm > 0:
+            count +=1
+
+        # Evaluate eout_svm
+        y_pred_out = svm.predict(x_out)
+        eout_svm = zero_one_loss(y_out, y_pred_out)
+
+
+        #######################################################
+        ###                REGULAR RBF
+        #######################################################
+
+        #Initialize ein_k and eout_k as empty lists
+        ein_k = []
+        eout_k = []
+        # Repeat for all elements in K
+        for i in range(len(K)):
+            #Instantiate SVC object
+            km = KMeans(n_clusters=K[i])
+
+            #Fit
+            km.fit(x,y)
+
+            # Get centers
+            mu = km.cluster_centers_.tolist()
+
+            # Calculate matrix phi for trainig and test datasets
+            phi = final_phi(x_list=x,mu_list=mu,gamma=gamma)
+            phi_out = final_phi(x_list=x_out,mu_list=mu,gamma=gamma)
+
+            # Instantiate LinearRegression objects
+            linreg = LinearRegression(phi,y)
+
+            # Fit
+            linreg.learn(lamb=lamb)
+
+            # Evaluate error in sample
+            ein_k.append(linreg.test_learning(phi,y))
+
+            # Evaluate error out of sample
+            eout_k.append(linreg.test_learning(phi_out,y_out))
+
+            # If eout_svm < eout_k, add to count
+            if eout_svm < eout_k[i]:
+                count_k[i] +=1
+
+            # Check for ein_k == 0
+            if ein_k[i] ==0:
+                count_k_sep[i] += 1
+        
+        #######################################################
+        ###                QUESTION 16
+        #######################################################
+
+        # Check each alternative of question 16
+        
+        # Alternative a
+        if ((ein_k[1] < ein_k[0]) and (eout_k[1] > eout_k[0])):
+            count_alt['a'] += 1
+        
+        # Alternative b
+        if ((ein_k[1] > ein_k[0]) and (eout_k[1] < eout_k[0])):
+            count_alt['b'] += 1
+
+        # Alternative c
+        if ((ein_k[1] > ein_k[0]) and (eout_k[1] > eout_k[0])):
+            count_alt['c'] += 1
+
+        # Alternative d
+        if ((ein_k[1] < ein_k[0]) and (eout_k[1] < eout_k[0])):
+            count_alt['d'] += 1
+
+        # Alternative e
+        if ((ein_k[1] == ein_k[0]) and (eout_k[1] == eout_k[0])):
+            count_alt['e'] += 1
+
+    # Print total count and percentage of Ein > 0
+    print(f'Total runs: {N_actual}\n')
+    print(f'QUESTION 13:')
+    print(f'Total not separable: {count}')
+    print(f'Percentage not separable: {round(count/N_actual*100,0)}%')
+    print()
+    print(f'QUESTION 14:')
+    print(f'Total where kernel form has lower Eout than K1=9 clusters: {count_k[0]}')
+    print(f'Percentage: {round(count_k[0]/N_actual*100,0)}%')
+    print()
+    print(f'QUESTION 15:')
+    print(f'Total where kernel form has lower Eout than K2=12 clusters: {count_k[1]}')
+    print(f'Percentage: {round(count_k[1]/N_actual*100,0)}%')
+    print()
+    print(f'QUESTION 16:')
+    print(f'Most frequent alternative: {max(count_alt, key=count_alt.get)}')
+    print()
+    print(f'QUESTION 18:')
+    print(f'Total separable with K1=9 clusters: {count_k_sep[0]}')
+    print(f'Percentage: {round(count_k_sep[0]/N_actual*100,0)}%')
+
+def question17(N_train=100,N_test=100,N_exp=500):
+    """
+    Solves question 17 of the final
+    """
+
+    # Constants of the SVM and RBF models
+    gamma=[1.5, 2]
+    K = 9
+    lamb = 0
+
+    # Count for each alternative of Q17
+    count_alt = {'a':0,'b':0,'c':0,'d':0,'e':0}
+
+    # Count iterations
+    N_actual = 0
+
+    #Repeat N_exp times
+    for i in range(N_exp):
+
+        if (i % (N_exp/10) ==0):
+            print(f'Running experiment number {i}...')
+        #######################################################
+        ###             TEST & TRAINING DATASETS
+        #######################################################
+
+        # Generate training dataset (compatible with the funciton made for hw8)
+        x,y= final_dataset(N=N_train)
+
+        # Generate a separate dataset for Eout
+        x_out,y_out = final_dataset(N=N_test)
+        
+        # Increment N_actual
+        N_actual += 1
+
+        #######################################################
+        ###                REGULAR RBF
+        #######################################################
+
+        #Initialize ein and eout as empty lists
+        ein = []
+        eout = []
+        
+        # Repeat for all elements in K
+        for i in range(len(gamma)):
+            #Instantiate SVC object
+            km = KMeans(n_clusters=K)
+
+            #Fit
+            km.fit(x,y)
+
+            # Get centers
+            mu = km.cluster_centers_.tolist()
+
+            # Calculate matrix phi for trainig and test datasets
+            phi = final_phi(x_list=x,mu_list=mu,gamma=gamma[i])
+            phi_out = final_phi(x_list=x_out,mu_list=mu,gamma=gamma[i])
+
+            # Instantiate LinearRegression objects
+            linreg = LinearRegression(phi,y)
+
+            # Fit
+            linreg.learn(lamb=lamb)
+
+            # Evaluate error in sample
+            ein.append(linreg.test_learning(phi,y))
+
+            # Evaluate error out of sample
+            eout.append(linreg.test_learning(phi_out,y_out))
+        
+        #######################################################
+        ###                CHECK ALTERNATIVES
+        #######################################################
+
+        # Check each alternative of question 17
+        
+        # Alternative a
+        if ((ein[1] < ein[0]) and (eout[1] > eout[0])):
+            count_alt['a'] += 1
+        
+        # Alternative b
+        if ((ein[1] > ein[0]) and (eout[1] < eout[0])):
+            count_alt['b'] += 1
+
+        # Alternative c
+        if ((ein[1] > ein[0]) and (eout[1] > eout[0])):
+            count_alt['c'] += 1
+
+        # Alternative d
+        if ((ein[1] < ein[0]) and (eout[1] < eout[0])):
+            count_alt['d'] += 1
+
+        # Alternative e
+        if ((ein[1] == ein[0]) and (eout[1] == eout[0])):
+            count_alt['e'] += 1
+
+    print(f'QUESTION 17:')
+    print(f'Total count for each alternative: {count_alt}')
+    print(f'Most frequent alternative: {max(count_alt, key=count_alt.get)}')
 
 class LearningAlgorithm():
     """
